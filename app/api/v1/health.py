@@ -1,12 +1,25 @@
 from datetime import datetime, timezone
+
 from fastapi import APIRouter
+
+from app.core.config import settings
+from app.services import whisper_service
 
 router = APIRouter()
 
 
 @router.get("/health")
 def health_check():
-    return {"success": True, "message": "OK", "data": {"status": "ok"}}
+    return {
+        "success": True,
+        "message": "OK",
+        "data": {
+            "status": "ok",
+            "whisper_model": settings.LOCAL_WHISPER_MODEL,
+            "whisper_loaded": whisper_service.is_model_loaded(),
+            "whisper_load_seconds": whisper_service.model_load_seconds(),
+        },
+    }
 
 
 @router.get("/info")

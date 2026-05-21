@@ -20,9 +20,12 @@ class Settings(BaseSettings):
     DEEPSEEK_LLM_MODEL: str = "deepseek-chat"
 
     # Local (faster-whisper + Ollama)
-    LOCAL_WHISPER_MODEL: str = "base"  # tiny|base|small|medium|large-v3
+    LOCAL_WHISPER_MODEL: str = "tiny"  # tiny|base|small|medium|large-v3 — tiny recommended on Render CPU
     LOCAL_WHISPER_DEVICE: str = "cpu"  # cpu|cuda
     LOCAL_WHISPER_COMPUTE_TYPE: str = "int8"
+    LOCAL_WHISPER_BEAM_SIZE: int = 1  # 1 = fastest; 5 = default quality
+    HF_TOKEN: Optional[str] = None  # optional Hugging Face token for faster model downloads
+    WHISPER_PRELOAD_ON_STARTUP: bool = True
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_LLM_MODEL: str = "llama3.1:8b"
 

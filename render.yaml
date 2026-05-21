@@ -19,7 +19,13 @@ services:
         value: cpu
       - key: LOCAL_WHISPER_COMPUTE_TYPE
         value: int8
+      - key: LOCAL_WHISPER_BEAM_SIZE
+        value: "1"
+      - key: WHISPER_PRELOAD_ON_STARTUP
+        value: "true"
       - key: DEFAULT_LANGUAGE
         value: es
       - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: HF_TOKEN
         sync: false
