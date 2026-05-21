@@ -322,22 +322,25 @@ async def detect_kanban_updates(
 
 
 async def _call_llm(prompt: str, json_mode: bool = False) -> str:
-    if settings.AI_PROVIDER == "openai":
-        return _call_openai(prompt, json_mode)
+    if settings.AI_PROVIDER == "deepseek":
+        return _call_deepseek(prompt, json_mode)
     return _call_ollama(prompt, json_mode)
 
 
-def _call_openai(prompt: str, json_mode: bool) -> str:
-    if not settings.OPENAI_API_KEY:
+def _call_deepseek(prompt: str, json_mode: bool) -> str:
+    if not settings.DEEPSEEK_API_KEY:
         raise HTTPException(
             status_code=500,
-            detail="OPENAI_API_KEY is not configured. Set AI_PROVIDER=local to use a local model.",
+            detail="DEEPSEEK_API_KEY is not configured. Set AI_PROVIDER=local to use Ollama.",
         )
     from openai import OpenAI
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = OpenAI(
+        api_key=settings.DEEPSEEK_API_KEY,
+        base_url=settings.DEEPSEEK_BASE_URL,
+    )
     completion = client.chat.completions.create(
-        model=settings.OPENAI_LLM_MODEL,
+        model=settings.DEEPSEEK_LLM_MODEL,
         messages=[
             {
                 "role": "system",

@@ -21,40 +21,11 @@ async def _save_temp(upload: UploadFile) -> str:
 
 
 async def transcribe(upload: UploadFile, language: str) -> Tuple[str, str, float]:
-    """Returns (transcript, language, duration_seconds)."""
-    if settings.AI_PROVIDER == "openai":
-        return await _transcribe_openai(upload, language)
+    """Returns (transcript, language, duration_seconds).
+
+    DeepSeek has no audio API — both ``deepseek`` and ``local`` use faster-whisper.
+    """
     return await _transcribe_local(upload, language)
-
-
-async def _transcribe_openai(upload: UploadFile, language: str) -> Tuple[str, str, float]:
-    if not settings.OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY is not configured. Set AI_PROVIDER=local to use a local model.",
-        )
-
-    from openai import OpenAI
-
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    path = await _save_temp(upload)
-    try:
-        with open(path, "rb") as f:
-            result = client.audio.transcriptions.create(
-                model=settings.OPENAI_WHISPER_MODEL,
-                file=f,
-                language=language or settings.DEFAULT_LANGUAGE,
-                response_format="verbose_json",
-            )
-        text = getattr(result, "text", "") or ""
-        detected_lang = getattr(result, "language", language) or language
-        duration = float(getattr(result, "duration", 0.0) or 0.0)
-        return text, detected_lang, duration
-    finally:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
 
 
 async def _transcribe_local(upload: UploadFile, language: str) -> Tuple[str, str, float]:

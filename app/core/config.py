@@ -6,18 +6,18 @@ class Settings(BaseSettings):
     """Configuration for the AI service.
 
     AI_PROVIDER controls which backend powers transcription and LLM calls:
-      - "openai": uses OpenAI APIs (whisper-1 + gpt-4o-mini). Requires OPENAI_API_KEY.
-      - "local":  uses faster-whisper (local) + Ollama (local LLM).
-                  Requires `faster-whisper` and `ollama` Python packages installed,
-                  and a running Ollama server with the configured model pulled.
+      - "deepseek": uses DeepSeek API for LLM + faster-whisper for transcription.
+                    Requires DEEPSEEK_API_KEY.
+      - "local":    uses faster-whisper (local) + Ollama (local LLM).
+                    Requires `ollama` Python package and a running Ollama server.
     """
 
-    AI_PROVIDER: Literal["openai", "local"] = "openai"
+    AI_PROVIDER: Literal["deepseek", "local"] = "deepseek"
 
-    # OpenAI
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_WHISPER_MODEL: str = "whisper-1"
-    OPENAI_LLM_MODEL: str = "gpt-4o-mini"
+    # DeepSeek (OpenAI-compatible chat API; no audio transcription endpoint)
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_LLM_MODEL: str = "deepseek-chat"
 
     # Local (faster-whisper + Ollama)
     LOCAL_WHISPER_MODEL: str = "base"  # tiny|base|small|medium|large-v3
