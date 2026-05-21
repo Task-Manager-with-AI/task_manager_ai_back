@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: task-manager-ai-back
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: AI_PROVIDER
+        value: deepseek
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
+      - key: DEEPSEEK_LLM_MODEL
+        value: deepseek-chat
+      - key: LOCAL_WHISPER_MODEL
+        value: tiny
+      - key: LOCAL_WHISPER_DEVICE
+        value: cpu
+      - key: LOCAL_WHISPER_COMPUTE_TYPE
+        value: int8
+      - key: DEFAULT_LANGUAGE
+        value: es
+      - key: DEEPSEEK_API_KEY
+        sync: false
