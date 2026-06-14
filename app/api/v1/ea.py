@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -16,7 +16,7 @@ import time
 from app.services.llm_service import parse_architecture_prompt
 
 @router.post("/generate")
-async def generate_diagram(req: DiagramRequest):
+async def generate_diagram(req: DiagramRequest, request: Request):
     try:
         # Call LLM to parse the prompt into a structured architecture
         architecture_data = await parse_architecture_prompt(req.prompt, req.diagram_type)
@@ -43,9 +43,9 @@ async def generate_diagram(req: DiagramRequest):
         # Pass the architecture_data instead of the raw prompt
         final_image_path = ea_service.generate_diagram(architecture_data, output_image_path)
         
-        # Return the public URL
-        # We assume the AI backend runs on localhost:8000
-        public_url = f"http://localhost:8000/public/diagrams/{unique_filename}"
+        # Return the public URL dynamically based on the request host
+        base_url = str(request.base_url).rstrip("/")
+        public_url = f"{base_url}/public/diagrams/{unique_filename}"
         
         return {
             "status": "success",
