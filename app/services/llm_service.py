@@ -321,6 +321,72 @@ async def detect_kanban_updates(
     return parsed
 
 
+def _build_architecture_prompt(prompt_text: str) -> str:
+    return (
+        "Eres un Arquitecto de Software Experto. Tu trabajo es analizar requerimientos "
+        "en texto libre y extraer un modelo de clases UML preciso.\n"
+        "Devuelve SOLO un JSON con la siguiente estructura estricta:\n"
+        "{\n"
+        '  "elements": [\n'
+        '    {"name": "NombreClase", "type": "Class", "attributes": ["atributo1: tipo", "atributo2: tipo"]}\n'
+        "  ],\n"
+        '  "relationships": [\n'
+        '    {"source": "ClaseOrigen", "target": "ClaseDestino", "type": "Asociación|Agregación|Composición|Generalización"}\n'
+        "  ]\n"
+        "}\n"
+        "Reglas:\n"
+        "- Extrae las entidades principales como elementos tipo 'Class'.\n"
+        "- Deduce atributos lógicos si no se especifican (ej. id, nombre).\n"
+        "- Las relaciones deben conectar nombres exactos de las clases extraídas.\n"
+        "- Si el prompt es muy simple, deduce al menos 3 o 4 clases lógicas.\n"
+        f"\nRequerimiento del usuario:\n{prompt_text}\n"
+    )
+
+def _build_use_case_prompt(prompt_text: str) -> str:
+    return (
+        "Eres un Analista de Requerimientos Experto. Tu trabajo es analizar requerimientos "
+        "en texto libre y extraer un modelo de Casos de Uso UML preciso.\n"
+        "Devuelve SOLO un JSON con la siguiente estructura estricta:\n"
+        "{\n"
+        '  "elements": [\n'
+        '    {"name": "UsuarioWeb", "type": "Actor"},\n'
+        '    {"name": "Comprar Producto", "type": "UseCase"}\n'
+        "  ],\n"
+        '  "relationships": [\n'
+        '    {"source": "UsuarioWeb", "target": "Comprar Producto", "type": "Association"}\n'
+        "  ]\n"
+        "}\n"
+        "Reglas:\n"
+        "- Extrae los roles principales como elementos tipo 'Actor'.\n"
+        "- Extrae las acciones principales como elementos tipo 'UseCase'.\n"
+        "- Las relaciones pueden ser 'Association' (Actor a Caso de Uso), 'Include' o 'Extend' (Caso de Uso a Caso de Uso).\n"
+        f"\nRequerimiento del usuario:\n{prompt_text}\n"
+    )
+
+async def parse_architecture_prompt(prompt_text: str, diagram_type: str = "class") -> Dict[str, Any]:
+    if not prompt_text.strip():
+        return {"elements": [], "relationships": []}
+    
+    if diagram_type == "use_case":
+        prompt = _build_use_case_prompt(prompt_text)
+    else:
+        prompt = _build_architecture_prompt(prompt_text)
+        
+    raw = await _call_llm(prompt, json_mode=True)
+    try:
+        parsed = _safe_parse_json(raw)
+    except json.JSONDecodeError:
+        parsed = {"elements": [], "relationships": []}
+        
+    # Compatibilidad hacia atrás si la IA devuelve "classes"
+    if "classes" in parsed and "elements" not in parsed:
+        parsed["elements"] = [{"name": c["name"], "type": "Class", "attributes": c.get("attributes", [])} for c in parsed["classes"]]
+        
+    parsed.setdefault("elements", [])
+    parsed.setdefault("relationships", [])
+    return parsed
+
+
 async def _call_llm(prompt: str, json_mode: bool = False) -> str:
     if settings.AI_PROVIDER == "deepseek":
         return _call_deepseek(prompt, json_mode)

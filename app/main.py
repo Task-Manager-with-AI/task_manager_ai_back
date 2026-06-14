@@ -1,11 +1,15 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.analysis import router as analysis_router
+from app.api.v1.docx import router as docx_router
+from app.api.v1.ea import router as ea_router
 from app.api.v1.health import router as health_router
 from app.api.v1.minutes import router as minutes_router
 from app.api.v1.suggestions import router as suggestions_router
@@ -56,8 +60,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+public_dir = os.path.join(os.path.dirname(__file__), "public")
+os.makedirs(public_dir, exist_ok=True)
+app.mount("/public", StaticFiles(directory=public_dir), name="public")
+
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(transcription_router, prefix="/api/v1")
 app.include_router(minutes_router, prefix="/api/v1")
 app.include_router(suggestions_router, prefix="/api/v1")
 app.include_router(analysis_router, prefix="/api/v1")
+app.include_router(docx_router, prefix="/api/v1")
+app.include_router(ea_router, prefix="/api/v1")
