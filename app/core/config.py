@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     OLLAMA_LLM_MODEL: str = "llama3.1:8b"
 
     DEFAULT_LANGUAGE: str = "es"
+    DOCX_MAX_CONTENT_CHARS: int = 200000
+    DOCX_CALLBACK_TIMEOUT_SECONDS: float = 15.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
