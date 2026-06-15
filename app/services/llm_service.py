@@ -122,6 +122,39 @@ async def extract_suggestions(
     return parsed
 
 
+def _build_chat_summary_prompt(transcript: str, language: str) -> str:
+    if language == "es":
+        return (
+            "Eres un asistente que resume conversaciones de chat de un equipo de trabajo.\n"
+            "Resume los mensajes recientes en 3 a 5 viñetas claras y concisas que respondan "
+            '"¿qué me perdí?". Enfócate en decisiones, pedidos, bloqueos y próximos pasos.\n'
+            'Devuelve SOLO un JSON con esta estructura: {"summary": ["viñeta 1", "viñeta 2"]}\n'
+            "Si no hay nada relevante, devuelve una lista vacía.\n"
+            f"\nConversación:\n{transcript}\n"
+        )
+    return (
+        "You summarize a team chat conversation. Summarize the recent messages in 3-5 "
+        'concise bullets answering "what did I miss?". Focus on decisions, requests, '
+        'blockers and next steps. Return ONLY JSON: {"summary": ["bullet 1", "bullet 2"]}\n'
+        f"\nConversation:\n{transcript}\n"
+    )
+
+
+async def summarize_chat(transcript: str, language: str = "es") -> Dict[str, Any]:
+    if not transcript.strip():
+        return {"summary": []}
+    prompt = _build_chat_summary_prompt(transcript, language)
+    raw = await _call_llm(prompt, json_mode=True)
+    try:
+        parsed = _safe_parse_json(raw)
+    except json.JSONDecodeError:
+        parsed = {"summary": [line.strip("-• ") for line in raw.splitlines() if line.strip()]}
+    summary = parsed.get("summary", []) or []
+    # Normalize to a list of non-empty strings.
+    normalized = [str(item).strip() for item in summary if str(item).strip()]
+    return {"summary": normalized}
+
+
 def _build_detect_type_prompt(transcript: str, meeting_title: str, participants: List[str], language: str) -> str:
     participants_str = ", ".join(participants) if participants else "(no listados)"
     if language == "es":

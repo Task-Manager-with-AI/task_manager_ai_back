@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.analysis import router as analysis_router
+from app.api.v1.chat import router as chat_router
 from app.api.v1.docx import router as docx_router
 from app.api.v1.ea import router as ea_router
 from app.api.v1.health import router as health_router
@@ -79,5 +80,6 @@ app.include_router(transcription_router, prefix="/api/v1")
 app.include_router(minutes_router, prefix="/api/v1")
 app.include_router(suggestions_router, prefix="/api/v1")
 app.include_router(analysis_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 app.include_router(docx_router, prefix="/api/v1")
 app.include_router(ea_router, prefix="/api/v1")
