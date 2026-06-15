@@ -5,25 +5,30 @@ from fastapi import HTTPException
 
 from app.core.config import settings
 
+SUPPORTED_DIAGRAM_TYPES = {"class", "use_case", "sequence"}
+SEQUENCE_PARTICIPANT_TYPES = {"actor", "boundary", "control", "entity", "lifeline"}
+SEQUENCE_MESSAGE_KINDS = {"sync", "async", "return"}
+SEQUENCE_FRAGMENT_TYPES = {"alt", "opt", "loop"}
+
 
 def _build_minutes_prompt(transcript: str, meeting_title: str, participants: List[str], language: str) -> str:
     participants_str = ", ".join(participants) if participants else "(no se listaron)"
     if language == "es":
         return (
             "Eres un asistente que redacta minutas de reuniones de equipos de software.\n"
-            "Analiza la transcripción y devuelve un JSON con esta estructura EXACTA:\n"
+            "Analiza la transcripciÃ³n y devuelve un JSON con esta estructura EXACTA:\n"
             "{\n"
-            '  "summary": "Resumen ejecutivo de 2 a 4 párrafos.",\n'
+            '  "summary": "Resumen ejecutivo de 2 a 4 pÃ¡rrafos.",\n'
             '  "key_points": ["Punto clave 1", "Punto clave 2"],\n'
             '  "agreements": [{"order": 1, "text": "Acuerdo concreto y accionable"}]\n'
             "}\n"
             "Reglas:\n"
             "- Los acuerdos deben ser frases cortas y accionables.\n"
             "- key_points son temas tratados, no acciones.\n"
-            "- Si no hay información suficiente, devuelve listas vacías.\n"
-            f"\nTítulo de la reunión: {meeting_title}\n"
+            "- Si no hay informaciÃ³n suficiente, devuelve listas vacÃ­as.\n"
+            f"\nTÃ­tulo de la reuniÃ³n: {meeting_title}\n"
             f"Participantes: {participants_str}\n"
-            f"\nTranscripción:\n{transcript}\n"
+            f"\nTranscripciÃ³n:\n{transcript}\n"
         )
     return (
         "You are an assistant that writes software-team meeting minutes.\n"
@@ -42,23 +47,23 @@ def _build_minutes_prompt(transcript: str, meeting_title: str, participants: Lis
 def _build_suggestions_prompt(
     agreements: List[str], project_members: List[Dict[str, str]], language: str
 ) -> str:
-    members_str = "\n".join(f"- {m['id']} → {m['name']}" for m in project_members)
+    members_str = "\n".join(f"- {m['id']} â†’ {m['name']}" for m in project_members)
     agreements_str = "\n".join(f"{i + 1}. {a}" for i, a in enumerate(agreements))
     if language == "es":
         return (
-            "Eres un asistente que convierte acuerdos de reunión en tareas accionables.\n"
+            "Eres un asistente que convierte acuerdos de reuniÃ³n en tareas accionables.\n"
             "Para cada acuerdo, genera una sugerencia de tarea. Devuelve SOLO un JSON con:\n"
             "{\n"
             '  "suggestions": [\n'
-            '    {"title": "Título accionable", "description": "Detalle", "priority": "LOW|MEDIUM|HIGH", "suggested_responsible_id": "uuid-o-null"}\n'
+            '    {"title": "TÃ­tulo accionable", "description": "Detalle", "priority": "LOW|MEDIUM|HIGH", "suggested_responsible_id": "uuid-o-null"}\n'
             "  ]\n"
             "}\n"
             "Reglas:\n"
-            "- El título debe ser breve e imperativo.\n"
+            "- El tÃ­tulo debe ser breve e imperativo.\n"
             "- Asigna suggested_responsible_id SOLO si en el acuerdo se menciona un nombre que coincide con un miembro listado abajo.\n"
             "- Si no hay coincidencia clara, usa null.\n"
-            "- priority por defecto MEDIUM, HIGH si hay urgencia explícita, LOW si es opcional.\n"
-            f"\nMiembros del proyecto (id → nombre):\n{members_str or '(ninguno)'}\n"
+            "- priority por defecto MEDIUM, HIGH si hay urgencia explÃ­cita, LOW si es opcional.\n"
+            f"\nMiembros del proyecto (id â†’ nombre):\n{members_str or '(ninguno)'}\n"
             f"\nAcuerdos:\n{agreements_str}\n"
         )
     return (
@@ -82,6 +87,139 @@ def _safe_parse_json(text: str) -> Dict[str, Any]:
     return json.loads(text)
 
 
+def _normalize_text(value: Any) -> str:
+    return " ".join(str(value or "").split()).strip()
+
+
+def _normalize_index(value: Any, max_index: int, default: int) -> int:
+    try:
+        index = int(value)
+    except (TypeError, ValueError):
+        index = default
+    if max_index < 1:
+        return 1
+    return max(1, min(index, max_index))
+
+
+def _normalize_sequence_diagram(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    raw_participants = parsed.get("participants", parsed.get("lifelines", [])) or []
+    raw_messages = parsed.get("messages", parsed.get("interactions", [])) or []
+    raw_fragments = parsed.get("fragments", []) or []
+    raw_activations = parsed.get("activations", []) or []
+
+    participants = []
+    participants_by_key: Dict[str, str] = {}
+    for raw in raw_participants:
+        if not isinstance(raw, dict):
+            continue
+        name = _normalize_text(raw.get("name") or raw.get("participant") or raw.get("lifeline"))
+        if not name:
+            continue
+        participant_type = _normalize_text(raw.get("type") or "lifeline").lower()
+        if participant_type not in SEQUENCE_PARTICIPANT_TYPES:
+            participant_type = "lifeline"
+        key = name.casefold()
+        if key in participants_by_key:
+            continue
+        participants_by_key[key] = name
+        participants.append({"name": name, "type": participant_type})
+
+    def resolve_participant_name(value: Any) -> str:
+        candidate = _normalize_text(value)
+        return participants_by_key.get(candidate.casefold(), candidate)
+
+    messages = []
+    for raw in raw_messages:
+        if not isinstance(raw, dict):
+            continue
+        source = resolve_participant_name(raw.get("from") or raw.get("source"))
+        target = resolve_participant_name(raw.get("to") or raw.get("target"))
+        if not source or not target:
+            continue
+        if source.casefold() not in participants_by_key or target.casefold() not in participants_by_key:
+            continue
+        message = _normalize_text(raw.get("message") or raw.get("name"))
+        kind = _normalize_text(raw.get("kind") or raw.get("message_type") or "sync").lower()
+        if kind not in SEQUENCE_MESSAGE_KINDS:
+            kind = "sync"
+        messages.append(
+            {
+                "from": participants_by_key[source.casefold()],
+                "to": participants_by_key[target.casefold()],
+                "message": message or "mensaje",
+                "kind": kind,
+            }
+        )
+
+    fragments = []
+    for raw in raw_fragments:
+        if not isinstance(raw, dict):
+            continue
+        fragment_type = _normalize_text(raw.get("type") or "alt").lower()
+        if fragment_type not in SEQUENCE_FRAGMENT_TYPES:
+            continue
+        label = _normalize_text(
+            raw.get("label") or raw.get("guard") or raw.get("condition") or raw.get("name")
+        )
+        start_index = _normalize_index(
+            raw.get("start_message_index", raw.get("start_message", raw.get("message_start"))),
+            len(messages),
+            1,
+        )
+        end_index = _normalize_index(
+            raw.get("end_message_index", raw.get("end_message", raw.get("message_end", start_index))),
+            len(messages),
+            start_index,
+        )
+        if end_index < start_index:
+            end_index = start_index
+        fragments.append(
+            {
+                "type": fragment_type,
+                "label": label or f"Fragmento {len(fragments) + 1}",
+                "start_message_index": start_index,
+                "end_message_index": end_index,
+            }
+        )
+
+    activations = []
+    for raw in raw_activations:
+        if not isinstance(raw, dict):
+            continue
+        participant = resolve_participant_name(raw.get("participant") or raw.get("name"))
+        if participant.casefold() not in participants_by_key:
+            continue
+        start_index = _normalize_index(
+            raw.get("start_message_index", raw.get("start_message")),
+            len(messages),
+            1,
+        )
+        end_index = _normalize_index(
+            raw.get("end_message_index", raw.get("end_message", start_index)),
+            len(messages),
+            start_index,
+        )
+        activations.append(
+            {
+                "participant": participants_by_key[participant.casefold()],
+                "start_message_index": start_index,
+                "end_message_index": max(start_index, end_index),
+            }
+        )
+
+    if len(participants) < 2 or len(messages) < 1:
+        raise ValueError(
+            "Sequence diagram generation requires at least 2 participants and 1 message."
+        )
+
+    return {
+        "participants": participants,
+        "messages": messages,
+        "fragments": fragments,
+        "activations": activations,
+    }
+
+
 async def generate_minutes(
     transcript: str, meeting_title: str, participants: List[str], language: str
 ) -> Dict[str, Any]:
@@ -94,7 +232,6 @@ async def generate_minutes(
     parsed.setdefault("summary", "")
     parsed.setdefault("key_points", [])
     parsed.setdefault("agreements", [])
-    # Normalize agreements ordering
     normalized = []
     for i, item in enumerate(parsed.get("agreements", []) or []):
         if isinstance(item, dict):
@@ -159,14 +296,14 @@ def _build_detect_type_prompt(transcript: str, meeting_title: str, participants:
     participants_str = ", ".join(participants) if participants else "(no listados)"
     if language == "es":
         return (
-            "Eres un asistente experto en metodologías ágiles (Scrum/Kanban).\n"
-            "Analiza la transcripción y detecta el tipo de reunión. Devuelve SOLO un JSON con:\n"
-            '{"meeting_type": "DAILY|SPRINT_PLANNING|REGULAR", "confidence": 0.95, "reason": "explicación breve"}\n'
+            "Eres un asistente experto en metodologÃ­as Ã¡giles (Scrum/Kanban).\n"
+            "Analiza la transcripciÃ³n y detecta el tipo de reuniÃ³n. Devuelve SOLO un JSON con:\n"
+            '{"meeting_type": "DAILY|SPRINT_PLANNING|REGULAR", "confidence": 0.95, "reason": "explicaciÃ³n breve"}\n'
             "Reglas:\n"
-            '- DAILY: si los participantes responden preguntas como "¿qué hice ayer?", "¿qué haré hoy?", "¿tengo impedimentos?". Suele ser breve (<30 min).\n'
-            '- SPRINT_PLANNING: si se habla de objetivos del sprint, historias de usuario, estimaciones, asignación de tareas para el próximo sprint.\n'
-            '- REGULAR: cualquier otra reunión (retrospectiva, revisión, técnica, general).\n'
-            f"\nTítulo: {meeting_title}\nParticipantes: {participants_str}\nTranscripción:\n{transcript}\n"
+            '- DAILY: si los participantes responden preguntas como "Â¿quÃ© hice ayer?", "Â¿quÃ© harÃ© hoy?", "Â¿tengo impedimentos?". Suele ser breve (<30 min).\n'
+            '- SPRINT_PLANNING: si se habla de objetivos del sprint, historias de usuario, estimaciones, asignaciÃ³n de tareas para el prÃ³ximo sprint.\n'
+            '- REGULAR: cualquier otra reuniÃ³n (retrospectiva, revisiÃ³n, tÃ©cnica, general).\n'
+            f"\nTÃ­tulo: {meeting_title}\nParticipantes: {participants_str}\nTranscripciÃ³n:\n{transcript}\n"
         )
     return (
         "You are an expert in agile methodologies. Classify this meeting. Return JSON:\n"
@@ -181,9 +318,9 @@ def _build_analyze_daily_prompt(transcript: str, participants: List[str], langua
         return (
             "Eres un asistente que analiza reuniones de Daily Scrum.\n"
             "Para cada participante extrae sus respuestas a las 3 preguntas del Daily:\n"
-            "1. ¿Qué hice ayer para contribuir al Sprint?\n"
-            "2. ¿Qué voy a hacer hoy para contribuir al Sprint?\n"
-            "3. ¿Veo algún impedimento que impida lograr el objetivo del Sprint?\n\n"
+            "1. Â¿QuÃ© hice ayer para contribuir al Sprint?\n"
+            "2. Â¿QuÃ© voy a hacer hoy para contribuir al Sprint?\n"
+            "3. Â¿Veo algÃºn impedimento que impida lograr el objetivo del Sprint?\n\n"
             "Devuelve SOLO un JSON con esta estructura:\n"
             "{\n"
             '  "entries": [\n'
@@ -193,10 +330,10 @@ def _build_analyze_daily_prompt(transcript: str, participants: List[str], langua
             '  "sprint_health": "GREEN|YELLOW|RED"\n'
             "}\n"
             "Reglas:\n"
-            "- sprint_health: GREEN = sin bloqueos, YELLOW = algún bloqueo menor, RED = bloqueos críticos o varios participantes bloqueados.\n"
-            "- Si un participante no mencionó algo, usa string vacío.\n"
-            "- overall_blockers consolida todos los bloqueos únicos.\n"
-            f"\nParticipantes: {participants_str}\nTranscripción:\n{transcript}\n"
+            "- sprint_health: GREEN = sin bloqueos, YELLOW = algÃºn bloqueo menor, RED = bloqueos crÃ­ticos o varios participantes bloqueados.\n"
+            "- Si un participante no mencionÃ³ algo, usa string vacÃ­o.\n"
+            "- overall_blockers consolida todos los bloqueos Ãºnicos.\n"
+            f"\nParticipantes: {participants_str}\nTranscripciÃ³n:\n{transcript}\n"
         )
     return (
         "You analyze Daily Scrum meetings. For each participant extract answers to the 3 daily questions.\n"
@@ -210,27 +347,27 @@ def _build_analyze_sprint_prompt(
     project_members: List[Dict[str, str]], language: str
 ) -> str:
     participants_str = ", ".join(participants) if participants else "(no listados)"
-    members_str = "\n".join(f"- {m['id']} → {m['name']}" for m in project_members) if project_members else "(ninguno)"
+    members_str = "\n".join(f"- {m['id']} â†’ {m['name']}" for m in project_members) if project_members else "(ninguno)"
     if language == "es":
         return (
-            "Eres un asistente experto en planificación de Sprints.\n"
-            "Analiza la transcripción de una reunión de Sprint Planning y devuelve un JSON con:\n"
+            "Eres un asistente experto en planificaciÃ³n de Sprints.\n"
+            "Analiza la transcripciÃ³n de una reuniÃ³n de Sprint Planning y devuelve un JSON con:\n"
             "{\n"
             '  "sprint_goal": "objetivo del sprint acordado",\n'
             '  "sprint_duration_weeks": 2,\n'
             '  "user_stories": ["Historia de usuario 1", "Historia de usuario 2"],\n'
             '  "tasks": [\n'
-            '    {"title": "Título de tarea", "description": "Detalle", "priority": "LOW|MEDIUM|HIGH", '
+            '    {"title": "TÃ­tulo de tarea", "description": "Detalle", "priority": "LOW|MEDIUM|HIGH", '
             '"suggested_responsible_id": "uuid-o-null", "story_points": 3}\n'
             "  ]\n"
             "}\n"
             "Reglas:\n"
             "- sprint_goal: objetivo concreto del sprint.\n"
             "- user_stories: historias mencionadas.\n"
-            "- tasks: tareas concretas acordadas, con estimación en story points si se mencionó.\n"
+            "- tasks: tareas concretas acordadas, con estimaciÃ³n en story points si se mencionÃ³.\n"
             "- Asigna suggested_responsible_id SOLO si el nombre coincide con un miembro listado.\n"
             f"\nMiembros del proyecto:\n{members_str}\n"
-            f"Participantes: {participants_str}\nTítulo: {meeting_title}\nTranscripción:\n{transcript}\n"
+            f"Participantes: {participants_str}\nTÃ­tulo: {meeting_title}\nTranscripciÃ³n:\n{transcript}\n"
         )
     return (
         "You analyze Sprint Planning meetings. Return JSON with sprint_goal, sprint_duration_weeks, user_stories[], tasks[].\n"
@@ -242,20 +379,20 @@ def _build_detect_kanban_prompt(
     transcript: str, existing_tasks: List[Dict[str, str]], language: str
 ) -> str:
     tasks_str = (
-        "\n".join(f"- ID:{t['id']} | Título: {t['title']} | Columna actual: {t['column_title']}" for t in existing_tasks)
+        "\n".join(f"- ID:{t['id']} | TÃ­tulo: {t['title']} | Columna actual: {t['column_title']}" for t in existing_tasks)
         if existing_tasks else "(no hay tareas registradas)"
     )
     if language == "es":
         return (
-            "Eres un asistente que detecta actualizaciones de tareas mencionadas durante una reunión.\n"
-            "Analiza la transcripción y detecta si alguien mencionó que una tarea:\n"
-            "- Fue completada / terminada / finalizada → new_status: DONE\n"
-            "- Está en progreso / empezando / trabajando en ello → new_status: IN_PROGRESS\n"
-            "- Está bloqueada / tiene impedimento → new_status: BLOCKED\n\n"
+            "Eres un asistente que detecta actualizaciones de tareas mencionadas durante una reuniÃ³n.\n"
+            "Analiza la transcripciÃ³n y detecta si alguien mencionÃ³ que una tarea:\n"
+            "- Fue completada / terminada / finalizada â†’ new_status: DONE\n"
+            "- EstÃ¡ en progreso / empezando / trabajando en ello â†’ new_status: IN_PROGRESS\n"
+            "- EstÃ¡ bloqueada / tiene impedimento â†’ new_status: BLOCKED\n\n"
             "Devuelve SOLO un JSON:\n"
             "{\n"
             '  "updates": [\n'
-            '    {"task_id": "uuid-si-coincide-con-lista-o-null", "task_title": "título mencionado", '
+            '    {"task_id": "uuid-si-coincide-con-lista-o-null", "task_title": "tÃ­tulo mencionado", '
             '"new_status": "DONE|IN_PROGRESS|BLOCKED", "mentioned_by": "nombre del participante", '
             '"confidence": 0.9, "notes": "contexto adicional"}\n'
             "  ]\n"
@@ -264,7 +401,7 @@ def _build_detect_kanban_prompt(
             "- task_id: intenta hacer match fuzzy con los IDs de la lista de tareas existentes. Si no hay match claro, usa null.\n"
             "- Solo incluye actualizaciones con confidence >= 0.7.\n"
             "- Si no hay actualizaciones, devuelve updates: [].\n"
-            f"\nTareas existentes en el proyecto:\n{tasks_str}\n\nTranscripción:\n{transcript}\n"
+            f"\nTareas existentes en el proyecto:\n{tasks_str}\n\nTranscripciÃ³n:\n{transcript}\n"
         )
     return (
         "Detect task status updates mentioned during the meeting. Return JSON: "
@@ -364,16 +501,17 @@ def _build_architecture_prompt(prompt_text: str) -> str:
         '    {"name": "NombreClase", "type": "Class", "attributes": ["atributo1: tipo", "atributo2: tipo"]}\n'
         "  ],\n"
         '  "relationships": [\n'
-        '    {"source": "ClaseOrigen", "target": "ClaseDestino", "type": "Asociación|Agregación|Composición|Generalización"}\n'
+        '    {"source": "ClaseOrigen", "target": "ClaseDestino", "type": "AsociaciÃ³n|AgregaciÃ³n|ComposiciÃ³n|GeneralizaciÃ³n"}\n'
         "  ]\n"
         "}\n"
         "Reglas:\n"
         "- Extrae las entidades principales como elementos tipo 'Class'.\n"
-        "- Deduce atributos lógicos si no se especifican (ej. id, nombre).\n"
-        "- Las relaciones deben conectar nombres exactos de las clases extraídas.\n"
-        "- Si el prompt es muy simple, deduce al menos 3 o 4 clases lógicas.\n"
+        "- Deduce atributos lÃ³gicos si no se especifican (ej. id, nombre).\n"
+        "- Las relaciones deben conectar nombres exactos de las clases extraÃ­das.\n"
+        "- Si el prompt es muy simple, deduce al menos 3 o 4 clases lÃ³gicas.\n"
         f"\nRequerimiento del usuario:\n{prompt_text}\n"
     )
+
 
 def _build_use_case_prompt(prompt_text: str) -> str:
     return (
@@ -396,25 +534,81 @@ def _build_use_case_prompt(prompt_text: str) -> str:
         f"\nRequerimiento del usuario:\n{prompt_text}\n"
     )
 
+
+def _build_sequence_prompt(prompt_text: str) -> str:
+    return (
+        "Eres un Arquitecto de Software Experto en UML. Tu trabajo es analizar requerimientos "
+        "en texto libre y extraer un diagrama de secuencia UML preciso.\n"
+        "Devuelve SOLO un JSON con esta estructura estricta:\n"
+        "{\n"
+        '  "participants": [\n'
+        '    {"name": "Usuario", "type": "actor"},\n'
+        '    {"name": "ServicioAutenticacion", "type": "control"},\n'
+        '    {"name": "BaseDeDatos", "type": "entity"}\n'
+        "  ],\n"
+        '  "messages": [\n'
+        '    {"from": "Usuario", "to": "ServicioAutenticacion", "message": "iniciarSesion(usuario, clave)", "kind": "sync"},\n'
+        '    {"from": "ServicioAutenticacion", "to": "BaseDeDatos", "message": "buscarUsuario(usuario)", "kind": "sync"},\n'
+        '    {"from": "ServicioAutenticacion", "to": "ServicioAutenticacion", "message": "validarFormato()", "kind": "sync"},\n'
+        '    {"from": "BaseDeDatos", "to": "ServicioAutenticacion", "message": "usuarioEncontrado", "kind": "return"}\n'
+        "  ],\n"
+        '  "fragments": [\n'
+        '    {"type": "alt", "label": "Credenciales validas", "guard": "[usuario existe]", "start_message_index": 1, "end_message_index": 4},\n'
+        '    {"type": "loop", "label": "Reintentos", "start_message_index": 1, "end_message_index": 2}\n'
+        "  ],\n"
+        '  "activations": [\n'
+        '    {"participant": "ServicioAutenticacion", "start_message_index": 1, "end_message_index": 3}\n'
+        "  ]\n"
+        "}\n"
+        "Reglas:\n"
+        "- participants.type solo puede ser: actor, boundary, control, entity o lifeline.\n"
+        "- messages.kind solo puede ser: sync, async o return.\n"
+        "- fragments.type solo puede ser: alt, opt o loop.\n"
+        "- Usa start_message_index y end_message_index con base 1 y refiriÃ©ndote a la lista messages.\n"
+        "- Puedes usar self-messages cuando un participante se envÃ­a un mensaje a sÃ­ mismo.\n"
+        "- Si el fragmento tiene una condiciÃ³n de guarda, inclÃºyela en guard o label.\n"
+        "- Devuelve al menos 2 participants y 1 message.\n"
+        "- MantÃ©n los nombres de participants consistentes en messages, fragments y activations.\n"
+        f"\nRequerimiento del usuario:\n{prompt_text}\n"
+    )
+
+
 async def parse_architecture_prompt(prompt_text: str, diagram_type: str = "class") -> Dict[str, Any]:
+    if diagram_type not in SUPPORTED_DIAGRAM_TYPES:
+        raise ValueError(
+            f"Unsupported diagram_type '{diagram_type}'. Supported values: class, use_case, sequence."
+        )
+
     if not prompt_text.strip():
+        if diagram_type == "sequence":
+            return {"participants": [], "messages": [], "fragments": [], "activations": []}
         return {"elements": [], "relationships": []}
-    
+
     if diagram_type == "use_case":
         prompt = _build_use_case_prompt(prompt_text)
+    elif diagram_type == "sequence":
+        prompt = _build_sequence_prompt(prompt_text)
     else:
         prompt = _build_architecture_prompt(prompt_text)
-        
+
     raw = await _call_llm(prompt, json_mode=True)
     try:
         parsed = _safe_parse_json(raw)
     except json.JSONDecodeError:
-        parsed = {"elements": [], "relationships": []}
-        
-    # Compatibilidad hacia atrás si la IA devuelve "classes"
+        if diagram_type == "sequence":
+            parsed = {"participants": [], "messages": [], "fragments": [], "activations": []}
+        else:
+            parsed = {"elements": [], "relationships": []}
+
+    if diagram_type == "sequence":
+        return _normalize_sequence_diagram(parsed)
+
     if "classes" in parsed and "elements" not in parsed:
-        parsed["elements"] = [{"name": c["name"], "type": "Class", "attributes": c.get("attributes", [])} for c in parsed["classes"]]
-        
+        parsed["elements"] = [
+            {"name": c["name"], "type": "Class", "attributes": c.get("attributes", [])}
+            for c in parsed["classes"]
+        ]
+
     parsed.setdefault("elements", [])
     parsed.setdefault("relationships", [])
     return parsed
@@ -443,7 +637,7 @@ def _call_deepseek(prompt: str, json_mode: bool) -> str:
         messages=[
             {
                 "role": "system",
-                "content": "Responde solo con JSON válido cuando se te pida formato JSON.",
+                "content": "Responde solo con JSON vÃ¡lido cuando se te pida formato JSON.",
             },
             {"role": "user", "content": prompt},
         ],
@@ -468,7 +662,7 @@ def _call_ollama(prompt: str, json_mode: bool) -> str:
         messages=[
             {
                 "role": "system",
-                "content": "Responde solo con JSON válido cuando se te pida formato JSON.",
+                "content": "Responde solo con JSON vÃ¡lido cuando se te pida formato JSON.",
             },
             {"role": "user", "content": prompt},
         ],
