@@ -20,15 +20,25 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.WHISPER_PRELOAD_ON_STARTUP:
+    if settings.TRANSCRIPTION_PROVIDER == "local" and settings.WHISPER_PRELOAD_ON_STARTUP:
         logger.info(
-            "Preloading Whisper on startup (model=%s)...",
+            "Preloading local Whisper on startup (model=%s)...",
             settings.LOCAL_WHISPER_MODEL,
         )
         try:
             await asyncio.to_thread(whisper_service.preload_whisper_model)
         except Exception:
             logger.exception("Whisper preload failed; will retry on first /transcribe")
+    elif settings.TRANSCRIPTION_PROVIDER == "groq":
+        logger.info(
+            "Transcription via Groq Whisper API (model=%s)",
+            settings.GROQ_WHISPER_MODEL,
+        )
+    elif settings.TRANSCRIPTION_PROVIDER == "openai":
+        logger.info(
+            "Transcription via OpenAI Whisper API (model=%s)",
+            settings.OPENAI_WHISPER_MODEL,
+        )
     else:
         logger.info("Whisper preload disabled (WHISPER_PRELOAD_ON_STARTUP=false)")
     yield

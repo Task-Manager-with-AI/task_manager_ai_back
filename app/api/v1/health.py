@@ -10,12 +10,15 @@ router = APIRouter()
 
 @router.get("/health")
 def health_check():
+    whisper_model = whisper_service.active_whisper_model()
+
     return {
         "success": True,
         "message": "OK",
         "data": {
             "status": "ok",
-            "whisper_model": settings.LOCAL_WHISPER_MODEL,
+            "transcription_provider": settings.TRANSCRIPTION_PROVIDER,
+            "whisper_model": whisper_model,
             "whisper_loaded": whisper_service.is_model_loaded(),
             "whisper_load_seconds": whisper_service.model_load_seconds(),
         },
