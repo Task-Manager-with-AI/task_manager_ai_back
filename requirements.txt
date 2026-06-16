@@ -16,5 +16,5 @@ python-docx==1.1.2
 # RAG embeddings — local provider (optional; only if EMBEDDING_PROVIDER=local)
 # sentence-transformers==3.0.1
 
-# Enterprise Architect COM API
-pywin32==307
+# Enterprise Architect COM API (Windows only — NOT installed in Docker/Linux deploy)
+# pip install -r requirements-windows.txt

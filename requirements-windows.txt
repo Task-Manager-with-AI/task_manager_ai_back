@@ -1,0 +1,11 @@
+# Windows-only extras for Enterprise Architect COM integration (/api/v1/ea/generate).
+# Install after requirements.txt on a local Windows machine with EA installed:
+#
+#   pip install -r requirements.txt
+#   pip install -r requirements-windows.txt
+#
+# Not used on Render/Docker (Linux). Class/use-case EA diagrams fall back to Mermaid;
+# sequence diagrams require EA COM and only work on Windows with this package.
+
+-r requirements.txt
+pywin32==307
