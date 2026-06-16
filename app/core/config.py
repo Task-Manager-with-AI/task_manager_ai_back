@@ -18,6 +18,18 @@ class Settings(BaseSettings):
     AI_PROVIDER: Literal["deepseek", "local"] = "deepseek"
     TRANSCRIPTION_PROVIDER: Literal["groq", "openai", "local"] = "groq"
 
+    # ── RAG / embeddings ────────────────────────────────────────────────
+    # EMBEDDING_PROVIDER controls how text is turned into vectors:
+    #   - "openai": OpenAI embeddings API (text-embedding-3-small, 1536 dims).
+    #   - "local":  sentence-transformers on this machine (CPU), multilingual.
+    # EMBEDDING_DIM MUST match the pgvector column created in the backend
+    # migration (vector(EMBEDDING_DIM)).
+    EMBEDDING_PROVIDER: Literal["openai", "local"] = "local"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIM: int = 1536
+    LOCAL_EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
+    EMBEDDING_BATCH_SIZE: int = 64
+
     # DeepSeek (OpenAI-compatible chat API)
     DEEPSEEK_API_KEY: Optional[str] = None
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
