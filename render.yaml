@@ -31,9 +31,9 @@ services:
       - key: LOCAL_EMBEDDING_MODEL
         value: paraphrase-multilingual-MiniLM-L12-v2
       - key: EMBEDDING_BATCH_SIZE
-        value: "32"
+        value: "16"
       - key: EMBEDDING_PRELOAD_ON_STARTUP
-        value: "true"
+        value: "false"
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: GROQ_API_KEY

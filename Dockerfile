@@ -1,7 +1,9 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-ARG TRANSCRIPTION_PROVIDER=openai
+# Render uses groq — installs requirements-render.txt (no faster-whisper).
+# For local Whisper in Docker: docker build --build-arg TRANSCRIPTION_PROVIDER=local .
+ARG TRANSCRIPTION_PROVIDER=groq
 ARG LOCAL_WHISPER_MODEL=tiny
 ARG EMBEDDING_PROVIDER=local
 ARG LOCAL_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
@@ -11,13 +13,18 @@ ENV HF_HOME=/app/.cache/huggingface \
     EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER} \
     LOCAL_EMBEDDING_MODEL=${LOCAL_EMBEDDING_MODEL}
 
+# ffprobe still used to measure audio duration when transcribing via Groq/OpenAI APIs
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
+COPY requirements.txt requirements-render.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && if [ "$TRANSCRIPTION_PROVIDER" = "local" ]; then \
+         pip install --no-cache-dir -r requirements.txt; \
+       else \
+         pip install --no-cache-dir -r requirements-render.txt; \
+       fi
 
 # Pre-cache local Whisper weights only when building for TRANSCRIPTION_PROVIDER=local
 RUN if [ "$TRANSCRIPTION_PROVIDER" = "local" ]; then \
