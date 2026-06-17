@@ -7,7 +7,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.api.v1.agent import router as agent_router
 from app.api.v1.analysis import router as analysis_router
+from app.api.v1.chat import router as chat_router
+from app.api.v1.embeddings import router as embeddings_router
 from app.api.v1.docx import router as docx_router
 from app.api.v1.ea import router as ea_router
 from app.api.v1.health import router as health_router
@@ -24,15 +27,25 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.WHISPER_PRELOAD_ON_STARTUP:
+    if settings.TRANSCRIPTION_PROVIDER == "local" and settings.WHISPER_PRELOAD_ON_STARTUP:
         logger.info(
-            "Preloading Whisper on startup (model=%s)...",
+            "Preloading local Whisper on startup (model=%s)...",
             settings.LOCAL_WHISPER_MODEL,
         )
         try:
             await asyncio.to_thread(whisper_service.preload_whisper_model)
         except Exception:
             logger.exception("Whisper preload failed; will retry on first /transcribe")
+    elif settings.TRANSCRIPTION_PROVIDER == "groq":
+        logger.info(
+            "Transcription via Groq Whisper API (model=%s)",
+            settings.GROQ_WHISPER_MODEL,
+        )
+    elif settings.TRANSCRIPTION_PROVIDER == "openai":
+        logger.info(
+            "Transcription via OpenAI Whisper API (model=%s)",
+            settings.OPENAI_WHISPER_MODEL,
+        )
     else:
         logger.info("Whisper preload disabled (WHISPER_PRELOAD_ON_STARTUP=false)")
     yield
@@ -69,5 +82,8 @@ app.include_router(transcription_router, prefix="/api/v1")
 app.include_router(minutes_router, prefix="/api/v1")
 app.include_router(suggestions_router, prefix="/api/v1")
 app.include_router(analysis_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 app.include_router(docx_router, prefix="/api/v1")
 app.include_router(ea_router, prefix="/api/v1")
+app.include_router(embeddings_router, prefix="/api/v1")
+app.include_router(agent_router, prefix="/api/v1")
