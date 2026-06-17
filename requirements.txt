@@ -13,8 +13,8 @@ python-docx==1.1.2
 # Local LLM (optional — only required if AI_PROVIDER=local)
 # ollama==0.3.0
 
-# RAG embeddings — local provider (optional; only if EMBEDDING_PROVIDER=local)
-# sentence-transformers==3.0.1
+# RAG embeddings — local provider (required when EMBEDDING_PROVIDER=local)
+sentence-transformers==3.0.1
 
 # Enterprise Architect COM API (Windows only — NOT installed in Docker/Linux deploy)
 # pip install -r requirements-windows.txt

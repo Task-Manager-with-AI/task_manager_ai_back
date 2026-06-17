@@ -23,6 +23,17 @@ services:
         value: "false"
       - key: DEFAULT_LANGUAGE
         value: es
+      # RAG Copilot — local embeddings (demo; no OpenAI quota needed)
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: EMBEDDING_DIM
+        value: "384"
+      - key: LOCAL_EMBEDDING_MODEL
+        value: paraphrase-multilingual-MiniLM-L12-v2
+      - key: EMBEDDING_BATCH_SIZE
+        value: "32"
+      - key: EMBEDDING_PRELOAD_ON_STARTUP
+        value: "true"
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: GROQ_API_KEY

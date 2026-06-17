@@ -3,9 +3,13 @@ WORKDIR /app
 
 ARG TRANSCRIPTION_PROVIDER=openai
 ARG LOCAL_WHISPER_MODEL=tiny
+ARG EMBEDDING_PROVIDER=local
+ARG LOCAL_EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
 ENV HF_HOME=/app/.cache/huggingface \
     TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER} \
-    LOCAL_WHISPER_MODEL=${LOCAL_WHISPER_MODEL}
+    LOCAL_WHISPER_MODEL=${LOCAL_WHISPER_MODEL} \
+    EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER} \
+    LOCAL_EMBEDDING_MODEL=${LOCAL_EMBEDDING_MODEL}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
@@ -20,6 +24,13 @@ RUN if [ "$TRANSCRIPTION_PROVIDER" = "local" ]; then \
       python -c "from faster_whisper import WhisperModel; WhisperModel('${LOCAL_WHISPER_MODEL}', device='cpu', compute_type='int8'); print('Whisper weights cached:', '${LOCAL_WHISPER_MODEL}')"; \
     else \
       echo "Skipping Whisper weight cache (TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER})"; \
+    fi
+
+# Pre-cache local embedding model for RAG (avoids HuggingFace download at runtime on Render)
+RUN if [ "$EMBEDDING_PROVIDER" = "local" ]; then \
+      python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${LOCAL_EMBEDDING_MODEL}'); print('Embedding model cached:', '${LOCAL_EMBEDDING_MODEL}')"; \
+    else \
+      echo "Skipping embedding model cache (EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER})"; \
     fi
 
 COPY . .
