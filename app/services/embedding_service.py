@@ -36,6 +36,14 @@ def embed_query(text: str) -> List[float]:
     return vectors[0] if vectors else [0.0] * settings.EMBEDDING_DIM
 
 
+def preload_embedding_model() -> None:
+    """Load the local sentence-transformers model into memory (no-op for openai)."""
+    if settings.EMBEDDING_PROVIDER != "local":
+        return
+    embed_texts(["warmup"])
+    logger.info("Local embedding model ready (%s)", settings.LOCAL_EMBEDDING_MODEL)
+
+
 def _embed_openai(texts: List[str]) -> List[List[float]]:
     if not settings.OPENAI_API_KEY:
         raise HTTPException(

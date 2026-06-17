@@ -19,7 +19,7 @@ from app.api.v1.suggestions import router as suggestions_router
 from app.api.v1.transcription import router as transcription_router
 from app.core.config import settings
 from app.core.logging_config import setup_logging
-from app.services import whisper_service
+from app.services import embedding_service, whisper_service
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -48,6 +48,23 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.info("Whisper preload disabled (WHISPER_PRELOAD_ON_STARTUP=false)")
+
+    if settings.EMBEDDING_PROVIDER == "local" and settings.EMBEDDING_PRELOAD_ON_STARTUP:
+        logger.info(
+            "Preloading local embedding model on startup (model=%s)...",
+            settings.LOCAL_EMBEDDING_MODEL,
+        )
+        try:
+            await asyncio.to_thread(embedding_service.preload_embedding_model)
+        except Exception:
+            logger.exception(
+                "Embedding preload failed; will retry on first /embeddings call"
+            )
+    elif settings.EMBEDDING_PROVIDER == "local":
+        logger.info(
+            "Local embeddings enabled (model=%s); preload disabled",
+            settings.LOCAL_EMBEDDING_MODEL,
+        )
     yield
 
 
