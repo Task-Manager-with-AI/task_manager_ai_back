@@ -1,9 +1,10 @@
-# Python virtual environments
+33# Python virtual environments
 .venv/
 venv/
 env/
 ENV/
-
+modelo_base.eapx
+app/public/diagrams/*
 # Bytecode & packaging
 __pycache__/
 *.py[cod]
