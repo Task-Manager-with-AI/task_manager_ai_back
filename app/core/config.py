@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1536
     LOCAL_EMBEDDING_MODEL: str = "paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_BATCH_SIZE: int = 64
+    # Warm the local embedding model on startup (avoids a slow first /embeddings call).
+    EMBEDDING_PRELOAD_ON_STARTUP: bool = False
 
     # DeepSeek (OpenAI-compatible chat API)
     DEEPSEEK_API_KEY: Optional[str] = None
