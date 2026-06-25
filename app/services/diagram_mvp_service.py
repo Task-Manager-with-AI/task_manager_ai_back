@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import tempfile
 import time
@@ -10,6 +11,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
+
+import certifi
 
 from app.core.config import settings
 
@@ -39,6 +42,7 @@ class DiagramMvpService:
         self.public_root = public_root
         self.kroki_base_url = (kroki_base_url or settings.KROKI_BASE_URL).rstrip("/")
         self.timeout_seconds = timeout_seconds or settings.DIAGRAM_MVP_TIMEOUT_SECONDS
+        self.ssl_context = ssl.create_default_context(cafile=certifi.where())
 
     def generate(
         self,
@@ -144,7 +148,7 @@ class DiagramMvpService:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=self.ssl_context) as response:
                 with open(output_path, "wb") as handle:
                     handle.write(response.read())
         except Exception as exc:
@@ -159,7 +163,7 @@ class DiagramMvpService:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds, context=self.ssl_context) as response:
                 with open(output_path, "wb") as handle:
                     handle.write(response.read())
         except Exception as exc:
