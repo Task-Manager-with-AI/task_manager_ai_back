@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     DEFAULT_LANGUAGE: str = "es"
     DOCX_MAX_CONTENT_CHARS: int = 200000
     DOCX_CALLBACK_TIMEOUT_SECONDS: float = 15.0
+    DIAGRAM_PUBLIC_DIR: str = "diagrams"
+    DIAGRAM_MVP_PUBLIC_DIR: str = "diagrams/mvp"
+    KROKI_BASE_URL: str = "https://kroki.io"
+    DIAGRAM_MVP_TIMEOUT_SECONDS: float = 10.0
+    DIAGRAM_RENDER_TIMEOUT_SECONDS: float = 10.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
