@@ -1,0 +1,29 @@
+services:
+  ai-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TRANSCRIPTION_PROVIDER: local
+        LOCAL_WHISPER_MODEL: base
+        EMBEDDING_PROVIDER: local
+        LOCAL_EMBEDDING_MODEL: paraphrase-multilingual-MiniLM-L12-v2
+    image: task-manager-ai:latest
+    container_name: task-manager-ai
+    env_file: .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    volumes:
+      - ai-diagrams:/app/diagrams
+      - ai-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  ai-diagrams:
+  ai-uploads:
